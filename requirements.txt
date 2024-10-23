@@ -6,3 +6,4 @@ passlib
 python-jose
 pymongo
 pydantic
+fastapi-standalone-docs
