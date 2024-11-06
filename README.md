@@ -1,4 +1,4 @@
-# Food Donation API
+# Food Donation - API
 
 ## Overview
 The Food Donation API is designed to facilitate the management of food donations, donors and recipients. It provides a secure and efficient way for organizations to track and manage food donations, ensuring that donations reach those in need.
