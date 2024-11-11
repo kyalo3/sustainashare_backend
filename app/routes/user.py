@@ -1,60 +1,89 @@
-from fastapi import FastAPI, Depends, HTTPException, status, APIRouter
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, status
 from datetime import timedelta
-from app.models.user import User, UserCreate, create_user, get_user_by_email
-from app.routes.auth import authenticate_user, create_access_token
+from typing import Dict
+from app.database import user_collection
+from app.models.user import UserCreate, create_user, get_user_by_email, user_helper
+from app.models.donor import get_donor_by_user_id
+from app.models.recipient import get_recipient_by_user_id
+from app.routes.auth import authenticate_user, create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from app.utils import verify_password
 
 router = APIRouter()
 
-
-@router.post("/token", response_model=dict)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    """
-    This endpoint allows users to log in and receive an access token.
-    Request Body:
-        form_data: an instance of OAuth2PasswordRequestForm which contains:
-            username: the email of the user (used for authentication)
-            password: the password of the user
-    """
-    user = await authenticate_user(form_data.username, form_data.password)
-    if not user:
+@router.post("/register", response_model=Dict[str, str])
+async def register_user(user: UserCreate) -> Dict[str, str]:
+    existing_user = await get_user_by_email(user.email)
+    if existing_user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",  # Updated error message
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
         )
-    
+
+    # Create the user and generate token
+    user_data = await create_user(user)
     access_token_expires = timedelta(minutes=30)
-    access_token = create_access_token(
-        data={"sub": user["email"]},  # Use email as the subject in the token
-        expires_delta=access_token_expires
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    access_token = create_access_token(data={"sub": user_data["email"]}, expires_delta=access_token_expires)
 
+    # Default role set to none
+    role = "none"
 
-@router.post("/users/", response_model=User)
-async def register_user(user: UserCreate):
-    """
-    This endpoint allows new users to register.
-    Request Body:
-        username: name of the user.
-        email: email of the user
-        password: password of the user
-    """
-    db_user = await get_user_by_email(user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+    # Check if the user has a donor or recipient profile
+    donor_profile = await get_donor_by_user_id(user_data["id"])
+    recipient_profile = await get_recipient_by_user_id(user_data["id"])
+    if donor_profile:
+        role = "donor"
+    elif recipient_profile:
+        role = "recipient"
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "id": user_data["id"],
+        "username": user_data["username"],
+        "email": user_data["email"],
+        "role": role
+    }
+
+async def get_user_by_credentials(email: str, password: str):
+    """Fetch a user by their email and password with role data if available"""
+    # Get the user by email
+    user = await user_collection.find_one({"email": email})
+    if not user or not verify_password(password, user["password"]):
+        raise HTTPException(status_code=400, detail="Invalid email or password")
+
+    # Prepare the response
+    response = user_helper(user)
+    user_id = response["id"]
+
+    # Check if the user is a donor
+    donor = await get_donor_by_user_id(user_id)
+    if donor:
+        response["role"] = "donor"
+        response["donor_data"] = donor  # add full donor data
+
+    # Check if the user is a recipient
+    recipient = await get_recipient_by_user_id(user_id)
+    if recipient:
+        response["role"] = "recipient"
+        response["recipient_data"] = recipient  # add full recipient data
+
+    # If neither, set role as "none"
+    if not donor and not recipient:
+        response["role"] = "none"
+
+    return response
+
+@router.post("/login", response_model=Dict[str, str])
+async def login_for_access_token(email: str, password: str) -> Dict[str, str]:
+    """Login endpoint to authenticate users and return full role data with access token"""
+    user_data = await get_user_by_credentials(email, password)
     
-    user_dict = await create_user(user)
-    user_id = user_dict.get("id")
-    return {"id": user_id, "username": user.username, "email": user.email}
+    # Generate an access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": user_data["email"]}, expires_delta=access_token_expires)
 
-
-async def get_user_by_credentials(email: str):
-    """
-    Fetch a user by their email.
-    """
-    user = await get_user_by_email(email)
-    if user:
-        return user
-    return None
+    # Add the access token to the response
+    user_data["access_token"] = access_token
+    user_data["token_type"] = "bearer"
+    
+    return user_data
