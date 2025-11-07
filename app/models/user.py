@@ -23,8 +23,6 @@ class PyObjectId(ObjectId):
                 raise ValueError("Invalid ObjectId")
             return ObjectId(value)
 
-        return handler(source_type)
-
     @classmethod
     def __get_pydantic_json_schema__(
         cls, core_schema, handler
@@ -124,4 +122,3 @@ async def get_user_by_credentials(email: str, password: str):
     if not user or not verify_password(password, user["password"]):
         return None
     return user_helper(user)
-

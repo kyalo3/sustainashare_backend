@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from typing import List
-from app.models.reviews import Review, ReviewCreate, create_review, get_reviews_by_user_id
+from app.models.reviews import Review, ReviewCreate, create_review, get_reviews_by_user_id, update_review, get_review_by_id, delete_review
 from app.models.user import get_user_by_id
 
 router = APIRouter()
@@ -43,4 +43,3 @@ async def get_user_reviews(user_id: str):
     if not reviews:
         raise HTTPException(status_code=404, detail="No reviews found for this user")
     return reviews
-
