@@ -63,3 +63,17 @@ async def update_review(review_id: str, review_data: ReviewCreate) -> dict:
     await review_collection.update_one({"_id": ObjectId(review_id)}, {"$set": update_data})
     updated_review = await review_collection.find_one({"_id": ObjectId(review_id)})
     return review_helper(updated_review)
+
+
+async def get_review_by_id(review_id: str):
+    """ function that gets a review by id """
+    review = await review_collection.find_one({"_id": ObjectId(review_id)})
+    if review:
+        return review_helper(review)
+    return None
+
+
+async def delete_review(review_id: str):
+    """ function that deletes a review by id """
+    deleted = await review_collection.delete_one({"_id": ObjectId(review_id)})
+    return deleted.deleted_count > 0
