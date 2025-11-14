@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 from app.models.donor import Donor, DonorCreate, DonorUpdate, create_donor, get_donor_by_id, get_donor_by_user_id, update_donor, delete_donor
-from app.routes.auth import get_current_user
+from app.routes.auth_utils import get_current_user
 from app.models.user import User
 
 router = APIRouter()

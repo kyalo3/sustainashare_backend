@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routes import donations, user, donor, recipient, reviews, volunteer
+from app.routes import donations, user, donor, recipient, reviews, volunteer, auth
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_standalone_docs import StandaloneDocs
 
@@ -22,9 +22,14 @@ app.add_middleware(
 )
 
 """ routes from other modules"""
+app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(donor.router)
 app.include_router(donations.router)
 app.include_router(recipient.router)
 app.include_router(volunteer.router)
 app.include_router(reviews.router)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

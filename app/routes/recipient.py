@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.models.recipient import Recipient, RecipientCreate, create_recipient
-from app.routes.auth import get_current_user
+from app.routes.auth_utils import get_current_user
 from app.models.user import User
 from typing import List
 from app.models.recipient import get_recipient_by_id, get_recipient_by_user_id

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 from app.models.volunteer import Volunteer, VolunteerCreate, VolunteerUpdate, create_volunteer, get_volunteer_by_id
-from app.routes.auth import get_current_user
+from app.routes.auth_utils import get_current_user
 from app.models.user import User
 
 router = APIRouter()

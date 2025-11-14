@@ -1,70 +1,52 @@
-from passlib.context import CryptContext
-from jose import JWTError, jwt
-from datetime import datetime, timedelta
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from app.models.user import get_user_by_email  # Updated to get user by email
-from app.utils import get_password_hash, verify_password
-import os
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
+from datetime import timedelta
+from app.models.user import create_user, get_user_by_email, UserCreate, get_user_by_credentials, UserRole
+from .auth_utils import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
 
-# Secret key and algorithm for JWT
-SECRET_KEY = os.getenv("SECRET_KEY", "secret")  # Environment variable for secret key, with default fallback
-ALGORITHM = "HS256"  # Algorithm for JWT
-ACCESS_TOKEN_EXPIRE_MINUTES = 300  # Token expiration time in minutes
+router = APIRouter(
+    prefix="/auth",
+    tags=["auth"],
+)
 
-# Initialize password context for hashing and verifying passwords
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# OAuth2PasswordBearer instance to get token from request
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
-
-async def authenticate_user(email: str, password: str):
-    """
-    Authenticate the user by verifying the email and password.
-    Returns the user if authentication is successful, otherwise returns False.
-    """
-    user = await get_user_by_email(email)  # Fetch user by email
-    if not user or not verify_password(password, user["password"]):
-        return False
-    return user
-
-
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    """
-    Function that creates a JWT access token with an expiration time.
-    """
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    """
-    Function that gets the current user from the provided JWT token.
-    Raises an HTTP 401 error if the token is invalid or the user does not exist.
-    """
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+async def register_user(user_data: UserCreate):
     try:
-        # Decode the JWT token
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")  # Now using email as the subject
-        if email is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    
-    # Fetch the user by email
-    user = await get_user_by_email(email)
-    if user is None:
-        raise credentials_exception
-    
-    return user
+        existing_user = await get_user_by_email(user_data.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
+        
+        user = await create_user(user_data)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Could not create user.",
+            )
+        return {"message": "User created successfully", "user_id": str(user.inserted_id)}
+    except Exception as e:
+        print(f"An unexpected error occurred during registration: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An unexpected error occurred: {e}",
+        )
+
+@router.post("/token")
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = await get_user_by_credentials(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["email"], "role": user["role"], "is_admin": user.get("is_admin", False), "user_id": user["id"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer", "role": user["role"], "user_id": user["id"]}
+
