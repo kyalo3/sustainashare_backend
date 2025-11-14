@@ -6,7 +6,7 @@ from fastapi_standalone_docs import StandaloneDocs
 
 app = FastAPI(
     title="Food Donation API",
-    description="API for managing food donations,users, donors, recipients, community volunteers and reviews",
+    description="API for managing food donations,users, donors, recipients",
     version="1.0.0",
 )
 
